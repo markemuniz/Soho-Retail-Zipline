@@ -519,11 +519,26 @@
   }
 
   function loadSheetData() {
-    if (!APPS_SCRIPT_URL) return Promise.resolve();
-    return fetch(APPS_SCRIPT_URL, { redirect: 'follow' })
-      .then(function(r) { return r.json(); })
-      .then(function(rows) { sheetRows = rows; })
-      .catch(function() {});
+    try {
+      var stored = localStorage.getItem('zipline_rows');
+      if (stored) sheetRows = JSON.parse(stored);
+    } catch(e) {}
+    return Promise.resolve();
+  }
+
+  function saveRowLocally(row) {
+    try {
+      var stored = localStorage.getItem('zipline_rows');
+      var rows = stored ? JSON.parse(stored) : [['Date','Net Sales','Net Sales Last Week','ATV','ATV Last Week','In-Store Transactions','Delivery Transactions','Total Transactions','Frequent Flyer Count','Team Shoutouts','Focus Areas','Inventory Updates','Cash Updates']];
+      var rowArr = [row.date, row.netSales, row.netSalesLastWeek || '', row.atv, row.atvLastWeek || '', row.inStore, row.delivery, row.total, row.ffCount, row.shoutouts, row.focus, row.inventory, row.cash];
+      var updated = false;
+      for (var i = 1; i < rows.length; i++) {
+        if (rows[i][0] === row.date) { rows[i] = rowArr; updated = true; break; }
+      }
+      if (!updated) rows.push(rowArr);
+      localStorage.setItem('zipline_rows', JSON.stringify(rows));
+      sheetRows = rows;
+    } catch(e) {}
   }
 
   function buildMessage(c, f, lw) {
@@ -701,7 +716,7 @@
     .then(function(res) {
       if (res.status === 'ok') {
         toast('Saved to Google Sheets!');
-        sheetRows.push([payload.date, payload.netSales, payload.netSalesLastWeek, payload.atv, payload.atvLastWeek, payload.inStore, payload.delivery, payload.total, payload.ffCount, payload.shoutouts, payload.focus, payload.inventory, payload.cash]);
+        saveRowLocally(payload);
       } else {
         toast('Sheet returned an error', 'error');
       }
