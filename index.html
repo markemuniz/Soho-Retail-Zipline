@@ -498,14 +498,20 @@
     return { ffCount: ffCount, ffBudtenders: buds };
   }
 
+  function normDate(str) {
+    if (!str) return '';
+    var parts = String(str).split('/');
+    if (parts.length !== 3) return String(str);
+    return parseInt(parts[0]) + '/' + parseInt(parts[1]) + '/' + parts[2];
+  }
+
   function findLastWeekRow(targetDate) {
     if (!sheetRows.length) return null;
     var d = new Date(targetDate);
     d.setDate(d.getDate() - 7);
-    var lwStr = (d.getMonth() + 1).toString().padStart(2, '0') + '/' +
-                d.getDate().toString().padStart(2, '0') + '/' + d.getFullYear();
+    var lwStr = normDate((d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear());
     for (var i = 1; i < sheetRows.length; i++) {
-      if (sheetRows[i][0] === lwStr) {
+      if (normDate(sheetRows[i][0]) === lwStr) {
         return { netSales: parseFloat(sheetRows[i][1]) || 0, atv: parseFloat(sheetRows[i][3]) || 0 };
       }
     }
