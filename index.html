@@ -519,8 +519,8 @@
   }
 
   function loadSheetData() {
-    if (!APPS_SCRIPT_URL) return;
-    fetch(APPS_SCRIPT_URL)
+    if (!APPS_SCRIPT_URL) return Promise.resolve();
+    return fetch(APPS_SCRIPT_URL, { redirect: 'follow' })
       .then(function(r) { return r.json(); })
       .then(function(rows) { sheetRows = rows; })
       .catch(function() {});
@@ -621,6 +621,10 @@
 
   document.getElementById('generate-btn').addEventListener('click', function() {
     if (!closingData || !feeData) return;
+    var btn = document.getElementById('generate-btn');
+    btn.disabled = true;
+    btn.textContent = 'Loading sheet data...';
+    loadSheetData().then(function() {
     var lw = findLastWeekRow(closingData.date);
     var msg = buildMessage(closingData, feeData, lw);
 
@@ -640,6 +644,12 @@
     renderStats(closingData, feeData, lw);
     document.getElementById('output').style.display = 'block';
     document.getElementById('output').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    btn.disabled = false;
+    btn.textContent = 'Generate Zipline Message';
+    }).catch(function() {
+      btn.disabled = false;
+      btn.textContent = 'Generate Zipline Message';
+    });
   });
 
   document.getElementById('copy-btn').addEventListener('click', function() {
