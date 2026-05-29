@@ -395,40 +395,35 @@
   }
 
   // ============================================================
-  // FIX: Unified date normalizer that handles Date objects,
-  // Excel serial numbers, and M/D/YYYY strings consistently.
-  // Always outputs "M/D/YYYY" with no zero-padding.
+  // Unified date normalizer — always outputs MM/DD/YYYY (zero-padded)
+  // to match Google Sheets storage format exactly.
   // ============================================================
+  function pad2(n) { return String(n).padStart(2, '0'); }
+
   function toDateStr(val) {
     if (!val) return '';
 
-    // Already a JS Date object
+    var m, d, y;
+
     if (val instanceof Date) {
-      return (val.getMonth() + 1) + '/' + val.getDate() + '/' + val.getFullYear();
+      m = val.getMonth() + 1; d = val.getDate(); y = val.getFullYear();
+      return pad2(m) + '/' + pad2(d) + '/' + y;
     }
 
-    // Excel serial number (number, not a date object)
     if (typeof val === 'number') {
-      // Convert Excel serial to JS date (Excel epoch is Jan 0 1900; JS is Jan 1 1970)
       var excelEpoch = new Date(1899, 11, 30);
-      var d = new Date(excelEpoch.getTime() + val * 86400000);
-      return (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+      var dt = new Date(excelEpoch.getTime() + val * 86400000);
+      m = dt.getMonth() + 1; d = dt.getDate(); y = dt.getFullYear();
+      return pad2(m) + '/' + pad2(d) + '/' + y;
     }
 
-    // String — handle M/D/YYYY, MM/DD/YYYY, YYYY-MM-DD
     var s = String(val).trim();
 
-    // YYYY-MM-DD
     var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (iso) {
-      return parseInt(iso[2]) + '/' + parseInt(iso[3]) + '/' + iso[1];
-    }
+    if (iso) return iso[2] + '/' + iso[3] + '/' + iso[1];
 
-    // M/D/YYYY or MM/DD/YYYY
     var slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-    if (slash) {
-      return parseInt(slash[1]) + '/' + parseInt(slash[2]) + '/' + slash[3];
-    }
+    if (slash) return pad2(parseInt(slash[1])) + '/' + pad2(parseInt(slash[2])) + '/' + slash[3];
 
     return s;
   }
@@ -504,7 +499,7 @@
     if (isNaN(d.getTime())) return null;
 
     d.setDate(d.getDate() - 7);
-    var lwStr = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+    var lwStr = pad2(d.getMonth() + 1) + '/' + pad2(d.getDate()) + '/' + d.getFullYear();
 
     for (var i = 1; i < sheetRows.length; i++) {
       var rowDateStr = toDateStr(sheetRows[i][0]);
