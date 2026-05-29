@@ -7,9 +7,9 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
     :root {
-      --bg:#0f0f0f; --surface:#1a1a1a; --surface2:#222; --border:#2e2e2e;
-      --text:#f0f0f0; --muted:#888; --accent:#c8f55a; --accent-dim:rgba(200,245,90,0.1);
-      --success:#4caf7d; --danger:#e05c5c; --radius:10px;
+      --bg:#0f0f0f;--surface:#1a1a1a;--surface2:#222;--border:#2e2e2e;
+      --text:#f0f0f0;--muted:#888;--accent:#c8f55a;--accent-dim:rgba(200,245,90,0.1);
+      --success:#4caf7d;--danger:#e05c5c;--radius:10px;
       --font:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
       --mono:'JetBrains Mono','Fira Code','Courier New',monospace;
     }
@@ -50,7 +50,7 @@
     .message-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;font-family:var(--mono);font-size:12.5px;line-height:1.75;white-space:pre-wrap;word-break:break-word;}
     .message-section-header{color:var(--accent);font-weight:600;}
     .debug-box{background:#080808;border:1px solid #222;border-radius:8px;padding:12px 14px;font-family:var(--mono);font-size:11px;line-height:1.9;white-space:pre-wrap;color:#666;max-height:280px;overflow-y:auto;}
-    .dok{color:var(--success);} .derr{color:var(--danger);} .dwarn{color:#f0a500;}
+    .dok{color:var(--success);}.derr{color:var(--danger);}.dwarn{color:#f0a500;}
     .toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:13px;display:none;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,.4);}
     .toast.success{border-color:var(--success);color:var(--success);}
     .toast.error{border-color:var(--danger);color:var(--danger);}
@@ -93,14 +93,8 @@
     <p class="section-label">Goals</p>
     <div class="card">
       <div class="grid-2">
-        <div>
-          <label class="field-label">Weekly goal ($)</label>
-          <input type="number" id="weekly-goal" value="580000">
-        </div>
-        <div>
-          <label class="field-label">Today's goal ($)</label>
-          <input type="number" id="daily-goal" value="60000">
-        </div>
+        <div><label class="field-label">Weekly goal ($)</label><input type="number" id="weekly-goal" value="580000"></div>
+        <div><label class="field-label">Today's goal ($)</label><input type="number" id="daily-goal" value="60000"></div>
       </div>
     </div>
   </div>
@@ -164,21 +158,12 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  // ── Config ─────────────────────────────────────────────────────
-  // Read via public CSV export (no CORS, no auth needed)
-  var SHEET_ID  = '1lW2DOT0jwcB63YnhSuNHhKDo8bUotl__aLlmBemhOGA';
-  var SHEET_GID = '913698334';
-  var CSV_URL   = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID +
-                  '/export?format=csv&gid=' + SHEET_GID;
-
-  // Save via Apps Script POST
   var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHG57s8DBEYaq4tXwiYnmQ0f1zdeyuqMpgzItPPKRJm-GYiEfseObTNMR_xYaC5t4q/exec';
 
   var closingData = null;
-  var feeData     = null;
-  var sheetRows   = []; // parsed CSV rows: [{date, netSales, atv, ...}]
+  var feeData = null;
+  var sheetRows = [];
 
-  // ── Debug ──────────────────────────────────────────────────────
   function dbg(msg, cls) {
     var box = document.getElementById('debug-out');
     if (!box) return;
@@ -194,29 +179,16 @@
   function toast(msg, type) {
     var el = document.getElementById('toast');
     el.textContent = msg;
-    el.className = 'toast ' + (type || 'success');
+    el.className = 'toast '+(type||'success');
     el.style.display = 'block';
     setTimeout(function(){ el.style.display='none'; }, 4000);
   }
 
-  // ── Formatting helpers ─────────────────────────────────────────
-  function fmt$(n) {
-    return '$' + Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-  }
-  function fmtGoal(n) {
-    n = Number(n);
-    if (n>=1000000) return '$'+(n/1000000).toFixed(1)+'M';
-    if (n>=1000)    return '$'+Math.round(n/1000)+'K';
-    return '$'+n;
-  }
-  function delta(current, last) {
-    if (!last||isNaN(last)||last===0) return null;
-    var d = ((current-last)/last*100).toFixed(1);
-    return (d>=0?'+':'')+d+'%';
-  }
+  function fmt$(n){ return '$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function fmtGoal(n){ n=Number(n); if(n>=1000000) return '$'+(n/1000000).toFixed(1)+'M'; if(n>=1000) return '$'+Math.round(n/1000)+'K'; return '$'+n; }
+  function delta(cur,last){ if(!last||isNaN(last)||last===0) return null; var d=((cur-last)/last*100).toFixed(1); return (d>=0?'+':'')+d+'%'; }
   function pad2(n){ return String(n).padStart(2,'0'); }
 
-  // Normalize any date to MM/DD/YYYY
   function toDateStr(val) {
     if (!val && val!==0) return '';
     if (val instanceof Date) {
@@ -224,251 +196,205 @@
       return pad2(val.getMonth()+1)+'/'+pad2(val.getDate())+'/'+val.getFullYear();
     }
     if (typeof val==='number') {
-      var dt = new Date(Math.round((val-25569)*86400*1000));
-      dt = new Date(dt.getTime()+dt.getTimezoneOffset()*60000);
+      var dt=new Date(Math.round((val-25569)*86400*1000));
+      dt=new Date(dt.getTime()+dt.getTimezoneOffset()*60000);
       return pad2(dt.getMonth()+1)+'/'+pad2(dt.getDate())+'/'+dt.getFullYear();
     }
-    var s = String(val).trim();
-    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    var s=String(val).trim();
+    var iso=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (iso) return iso[2]+'/'+iso[3]+'/'+iso[1];
-    var sl = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    var sl=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (sl) return pad2(parseInt(sl[1]))+'/'+pad2(parseInt(sl[2]))+'/'+sl[3];
     return s;
   }
 
-  // ── CSV parser (handles quoted fields with commas/newlines) ────
-  function parseCSV(text) {
-    var rows = [], cur = [], field = '', inQ = false;
-    for (var i = 0; i < text.length; i++) {
-      var ch = text[i], nx = text[i+1];
-      if (inQ) {
-        if (ch==='"' && nx==='"') { field+='"'; i++; }
-        else if (ch==='"') { inQ=false; }
-        else { field+=ch; }
-      } else {
-        if (ch==='"') { inQ=true; }
-        else if (ch===',') { cur.push(field); field=''; }
-        else if (ch==='\r'&&nx==='\n') { cur.push(field); rows.push(cur); cur=[]; field=''; i++; }
-        else if (ch==='\n'||ch==='\r') { cur.push(field); rows.push(cur); cur=[]; field=''; }
-        else { field+=ch; }
-      }
-    }
-    if (field||cur.length) { cur.push(field); rows.push(cur); }
-    return rows;
-  }
-
-  // ── Load sheet data via public CSV export ──────────────────────
+  // ── JSONP loader — only method that reliably works cross-origin with Apps Script ──
   function loadSheetData() {
-    dbg('Fetching sheet data via CSV export...');
-    // Add cache-buster so we always get fresh data
-    var url = CSV_URL + '&cachebust=' + Date.now();
-    return fetch(url)
-      .then(function(r) {
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.text();
-      })
-      .then(function(csv) {
-        var rows = parseCSV(csv);
-        dbg('CSV rows received: ' + rows.length, 'dok');
-        if (rows.length < 2) { dbg('Sheet appears empty.','dwarn'); return; }
+    dbg('Fetching sheet data via JSONP...');
+    return new Promise(function(resolve) {
+      var cbName = '__gs_'+Date.now();
+      var settled = false;
 
-        // Row 0 is header; rows 1+ are data
-        // Columns: Date(0), NetSales(1), NetSalesLW(2), ATV(3), ATVLW(4), ...
-        sheetRows = rows.slice(1).map(function(r) {
-          return {
-            date:       toDateStr(r[0]),
-            netSales:   parseFloat(r[1]) || 0,
-            netSalesLW: parseFloat(r[2]) || 0,
-            atv:        parseFloat(r[3]) || 0,
-            atvLW:      parseFloat(r[4]) || 0
-          };
-        }).filter(function(r){ return r.date; });
+      function finish(rows) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { document.head.removeChild(script); } catch(e){}
+        delete window[cbName];
+        if (rows) {
+          // rows[0] is the header row, rows[1]+ are data
+          // columns: Date(0), NetSales(1), NetSalesLW(2), ATV(3), ATVLW(4)
+          sheetRows = rows.slice(1).map(function(r){
+            return {
+              date:     toDateStr(r[0]),
+              netSales: parseFloat(r[1])||0,
+              atv:      parseFloat(r[3])||0
+            };
+          }).filter(function(r){ return r.date; });
+          dbg('Loaded '+sheetRows.length+' rows.', 'dok');
+          sheetRows.forEach(function(r,i){
+            dbg('  ['+i+'] "'+r.date+'"  netSales='+r.netSales+'  atv='+r.atv);
+          });
+        } else {
+          dbg('JSONP returned no data.','derr');
+        }
+        resolve();
+      }
 
-        dbg('Parsed ' + sheetRows.length + ' data rows.', 'dok');
-        sheetRows.forEach(function(r, i) {
-          dbg('  ['+i+'] date="'+r.date+'" netSales='+r.netSales+' atv='+r.atv);
-        });
-      })
-      .catch(function(e) {
-        dbg('CSV fetch error: ' + e.message, 'derr');
-      });
+      window[cbName] = function(data){ finish(data); };
+
+      var script = document.createElement('script');
+      script.src = APPS_SCRIPT_URL+'?callback='+cbName+'&t='+Date.now();
+      script.onerror = function(){
+        dbg('JSONP script load failed.','derr');
+        finish(null);
+      };
+
+      var timer = setTimeout(function(){
+        dbg('JSONP timed out after 12s.','derr');
+        finish(null);
+      }, 12000);
+
+      document.head.appendChild(script);
+    });
   }
 
-  // ── Last-week lookup ───────────────────────────────────────────
   function findLastWeekRow(targetDate) {
     dbg('--- Last-Week Lookup ---');
-    dbg('Report date: "' + targetDate + '"');
-
-    if (!sheetRows.length) {
-      dbg('No sheet rows loaded.', 'derr');
-      return null;
-    }
+    dbg('Report date: "'+targetDate+'"');
+    if (!sheetRows.length) { dbg('No rows loaded — JSONP did not return data.','derr'); return null; }
 
     var d = new Date(targetDate);
-    if (isNaN(d.getTime())) {
-      dbg('Cannot parse date.', 'derr');
-      return null;
-    }
-    d.setDate(d.getDate() - 7);
-    var lwStr = pad2(d.getMonth()+1) + '/' + pad2(d.getDate()) + '/' + d.getFullYear();
-    dbg('Searching for: "' + lwStr + '"');
+    if (isNaN(d.getTime())) { dbg('Cannot parse report date.','derr'); return null; }
+    d.setDate(d.getDate()-7);
+    var lwStr = pad2(d.getMonth()+1)+'/'+pad2(d.getDate())+'/'+d.getFullYear();
+    dbg('Searching for: "'+lwStr+'"');
 
-    for (var i = 0; i < sheetRows.length; i++) {
-      if (sheetRows[i].date === lwStr) {
-        dbg('MATCH: netSales='+sheetRows[i].netSales+'  atv='+sheetRows[i].atv, 'dok');
-        return { netSales: sheetRows[i].netSales, atv: sheetRows[i].atv };
+    for (var i=0; i<sheetRows.length; i++) {
+      if (sheetRows[i].date===lwStr) {
+        dbg('MATCH: netSales='+sheetRows[i].netSales+'  atv='+sheetRows[i].atv,'dok');
+        return {netSales:sheetRows[i].netSales, atv:sheetRows[i].atv};
       }
     }
-    dbg('No match for "' + lwStr + '". That date is not in the sheet yet.', 'dwarn');
+    dbg('No match for "'+lwStr+'". Row missing from sheet.','dwarn');
     return null;
   }
 
-  // ── Save via Apps Script (no-cors form POST) ───────────────────
+  // ── Save via form POST (no CORS preflight) ──
   function saveToSheet(payload) {
     return new Promise(function(resolve) {
-      dbg('Saving via form POST to Apps Script...');
-
       var iframe = document.createElement('iframe');
-      iframe.name = 'save_frame_' + Date.now();
-      iframe.style.cssText = 'display:none;';
+      iframe.name = 'sf_'+Date.now();
+      iframe.style.cssText='display:none;';
       document.body.appendChild(iframe);
 
       var form = document.createElement('form');
-      form.method = 'POST';
-      form.action = APPS_SCRIPT_URL;
-      form.target = iframe.name;
-      form.style.display = 'none';
-
-      Object.keys(payload).forEach(function(key) {
-        var inp = document.createElement('input');
-        inp.type = 'hidden';
-        inp.name = key;
-        inp.value = String(payload[key]);
+      form.method='POST';
+      form.action=APPS_SCRIPT_URL;
+      form.target=iframe.name;
+      form.style.display='none';
+      Object.keys(payload).forEach(function(k){
+        var inp=document.createElement('input');
+        inp.type='hidden'; inp.name=k; inp.value=String(payload[k]);
         form.appendChild(inp);
       });
-
       document.body.appendChild(form);
       form.submit();
-      dbg('Form submitted. Waiting 4s for Apps Script to process...');
 
-      setTimeout(function() {
-        try { document.body.removeChild(form); } catch(e){}
-        try { document.body.removeChild(iframe); } catch(e){}
+      setTimeout(function(){
+        try{document.body.removeChild(form);}catch(e){}
+        try{document.body.removeChild(iframe);}catch(e){}
         resolve();
       }, 4000);
     });
   }
 
-  // ── XLSX readers ───────────────────────────────────────────────
   function readXlsx(file, cb) {
-    var r = new FileReader();
-    r.onload = function(e) {
-      try { cb(null, XLSX.read(e.target.result,{type:'array',cellDates:true})); }
-      catch(err){ cb(err); }
-    };
+    var r=new FileReader();
+    r.onload=function(e){ try{cb(null,XLSX.read(e.target.result,{type:'array',cellDates:true}));}catch(err){cb(err);} };
     r.readAsArrayBuffer(file);
   }
 
   function parseClosing(wb) {
-    var ws = wb.Sheets['Overview'];
+    var ws=wb.Sheets['Overview'];
     if (!ws) throw new Error('No Overview sheet in closing report');
-    var data = XLSX.utils.sheet_to_json(ws);
-    var row = data[0];
+    var data=XLSX.utils.sheet_to_json(ws);
+    var row=data[0];
     if (!row) throw new Error('No data in Overview sheet');
-    var ws2 = wb.Sheets['Payments'];
-    var inStore=0, delivery=0;
-    if (ws2) {
-      XLSX.utils.sheet_to_json(ws2).forEach(function(r){
-        if (r['isDelivery']==='Yes') delivery++; else inStore++;
-      });
-    }
-    var dateStr = toDateStr(row['PosDate']);
-    dbg('Closing report date parsed: "' + dateStr + '"');
-    return {
-      netSales: row['NetSales']||0, atv: row['AvgPerCart']||0,
-      inStore:inStore, delivery:delivery, total:inStore+delivery,
-      date: dateStr
-    };
+    var ws2=wb.Sheets['Payments'];
+    var inStore=0,delivery=0;
+    if (ws2) XLSX.utils.sheet_to_json(ws2).forEach(function(r){ if(r['isDelivery']==='Yes') delivery++; else inStore++; });
+    var dateStr=toDateStr(row['PosDate']);
+    dbg('Closing date parsed: "'+dateStr+'"');
+    return {netSales:row['NetSales']||0,atv:row['AvgPerCart']||0,inStore:inStore,delivery:delivery,total:inStore+delivery,date:dateStr};
   }
 
   function parseFees(wb) {
-    var ws = wb.Sheets['Report'];
+    var ws=wb.Sheets['Report'];
     if (!ws) throw new Error('No Report sheet in fee/donation file');
-    var data = XLSX.utils.sheet_to_json(ws,{header:1});
+    var data=XLSX.utils.sheet_to_json(ws,{header:1});
     var hi=-1;
-    for (var i=0;i<data.length;i++){
-      if (data[i]&&data[i].indexOf('FeeDonationName')!==-1){hi=i;break;}
-    }
-    if (hi===-1) throw new Error('Could not find headers in fee/donation report');
-    var hdrs=data[hi], feeCol=hdrs.indexOf('FeeDonationName'), budCol=hdrs.indexOf('Budtender');
-    var ffCount=0, seen={}, buds=[];
-    for (var j=hi+1;j<data.length;j++){
-      var row=data[j];
-      if (!row||!row[feeCol]) continue;
-      if (String(row[feeCol]).indexOf('Frequent Flyer')!==-1){
+    for(var i=0;i<data.length;i++){ if(data[i]&&data[i].indexOf('FeeDonationName')!==-1){hi=i;break;} }
+    if(hi===-1) throw new Error('Could not find headers in fee/donation report');
+    var hdrs=data[hi],feeCol=hdrs.indexOf('FeeDonationName'),budCol=hdrs.indexOf('Budtender');
+    var ffCount=0,seen={},buds=[];
+    for(var j=hi+1;j<data.length;j++){
+      var row=data[j]; if(!row||!row[feeCol]) continue;
+      if(String(row[feeCol]).indexOf('Frequent Flyer')!==-1){
         ffCount++;
         var name=(row[budCol]||'').replace(/\s*DTBK\s*/gi,'').trim();
-        if (name&&!seen[name]){seen[name]=true;buds.push(name);}
+        if(name&&!seen[name]){seen[name]=true;buds.push(name);}
       }
     }
-    return {ffCount:ffCount, ffBudtenders:buds};
+    return {ffCount:ffCount,ffBudtenders:buds};
   }
 
-  // ── Build message ──────────────────────────────────────────────
-  function buildMessage(c, f, lw) {
-    var weekly   = document.getElementById('weekly-goal').value||580000;
-    var daily    = document.getElementById('daily-goal').value||60000;
-    var shoutouts= document.getElementById('field-shoutouts').value.trim();
-    var focus    = document.getElementById('field-focus').value.trim();
-    var inventory= document.getElementById('field-inventory').value.trim();
-    var cash     = document.getElementById('field-cash').value.trim();
+  function buildMessage(c,f,lw) {
+    var weekly=document.getElementById('weekly-goal').value||580000;
+    var daily=document.getElementById('daily-goal').value||60000;
+    var shoutouts=document.getElementById('field-shoutouts').value.trim();
+    var focus=document.getElementById('field-focus').value.trim();
+    var inventory=document.getElementById('field-inventory').value.trim();
+    var cash=document.getElementById('field-cash').value.trim();
 
-    var shoutoutLines=[];
-    if (f.ffBudtenders.length>0)
-      shoutoutLines.push('Shout out to '+f.ffBudtenders.join(' and ')+' for signing up Frequent Flyer members!! Great Job!!!');
-    if (shoutouts) shoutoutLines.push('Shout out to '+shoutouts+'!! Great Job!!!');
-    if (!shoutoutLines.length) shoutoutLines.push('No shoutouts today.');
+    var sl=[];
+    if(f.ffBudtenders.length>0) sl.push('Shout out to '+f.ffBudtenders.join(' and ')+' for signing up Frequent Flyer members!! Great Job!!!');
+    if(shoutouts) sl.push('Shout out to '+shoutouts+'!! Great Job!!!');
+    if(!sl.length) sl.push('No shoutouts today.');
 
-    var lwNet='[Add from last week]', lwAtv='[Add from last week]';
-    if (lw && lw.netSales) {
-      var dNet=delta(c.netSales,lw.netSales);
-      lwNet=fmt$(lw.netSales)+(dNet?' (\u0394 '+dNet+')':'');
-    }
-    if (lw && lw.atv) {
-      var dAtv=delta(c.atv,lw.atv);
-      lwAtv=fmt$(lw.atv)+(dAtv?' (\u0394 '+dAtv+')':'');
-    }
+    var lwNet='[Add from last week]',lwAtv='[Add from last week]';
+    if(lw&&lw.netSales){ var dN=delta(c.netSales,lw.netSales); lwNet=fmt$(lw.netSales)+(dN?' (\u0394 '+dN+')':''); }
+    if(lw&&lw.atv){      var dA=delta(c.atv,lw.atv);           lwAtv=fmt$(lw.atv)+(dA?' (\u0394 '+dA+')':''); }
 
-    var msg='Sales Recap\n';
-    msg+="Yesterday's Sales: "+fmt$(c.netSales)+'\n';
-    msg+='Same Day Last Week: '+lwNet+'\n';
-    msg+='Weekly Goal: '+fmtGoal(weekly)+'\n';
-    msg+="Today's Goal: "+fmtGoal(daily)+'\n\n';
-    msg+='Performance Metrics\n';
-    msg+="Yesterday's Frequent Flyer Count: "+f.ffCount+'\n';
-    msg+='ATV (Yesterday): '+fmt$(c.atv)+'\n';
-    msg+='ATV (Last Week): '+lwAtv+'\n\n';
-    msg+='Transactions Yesterday:\n';
-    msg+='In-Store: '+c.inStore+'\n';
-    msg+='Delivery: '+c.delivery+'\n';
-    msg+='Total: '+c.total+'\n\n';
-    msg+='Team Shoutouts\n'+shoutoutLines.join('\n')+'\n\n';
-    msg+='Focus Areas\n'+focus+'\n\n';
-    msg+='Inventory Updates\n'+inventory+'\n\n';
-    msg+='Cash Updates\n'+cash;
-    return msg;
+    return 'Sales Recap\n'+
+      "Yesterday's Sales: "+fmt$(c.netSales)+'\n'+
+      'Same Day Last Week: '+lwNet+'\n'+
+      'Weekly Goal: '+fmtGoal(weekly)+'\n'+
+      "Today's Goal: "+fmtGoal(daily)+'\n\n'+
+      'Performance Metrics\n'+
+      "Yesterday's Frequent Flyer Count: "+f.ffCount+'\n'+
+      'ATV (Yesterday): '+fmt$(c.atv)+'\n'+
+      'ATV (Last Week): '+lwAtv+'\n\n'+
+      'Transactions Yesterday:\n'+
+      'In-Store: '+c.inStore+'\n'+
+      'Delivery: '+c.delivery+'\n'+
+      'Total: '+c.total+'\n\n'+
+      'Team Shoutouts\n'+sl.join('\n')+'\n\n'+
+      'Focus Areas\n'+focus+'\n\n'+
+      'Inventory Updates\n'+inventory+'\n\n'+
+      'Cash Updates\n'+cash;
   }
 
-  function renderStats(c, f, lw) {
+  function renderStats(c,f,lw) {
     var lwNet=(lw&&lw.netSales)?fmt$(lw.netSales):'—';
     var lwAtv=(lw&&lw.atv)?fmt$(lw.atv):'—';
-    var dNet=lw?delta(c.netSales,lw.netSales):null;
-    var dAtv=lw?delta(c.atv,lw.atv):null;
+    var dN=lw?delta(c.netSales,lw.netSales):null;
+    var dA=lw?delta(c.atv,lw.atv):null;
     document.getElementById('stats-row').innerHTML=[
-      {label:'Net Sales',      value:fmt$(c.netSales), sub:dNet?'vs '+lwNet+' ('+dNet+')':'last week: '+lwNet},
-      {label:'ATV',            value:fmt$(c.atv),      sub:dAtv?'vs '+lwAtv+' ('+dAtv+')':'last week: '+lwAtv},
-      {label:'Transactions',   value:c.total,          sub:c.inStore+' in-store / '+c.delivery+' delivery'},
-      {label:'Frequent Flyers',value:f.ffCount,        sub:f.ffBudtenders.length?f.ffBudtenders.join(', '):'none today'}
+      {label:'Net Sales',      value:fmt$(c.netSales),sub:dN?'vs '+lwNet+' ('+dN+')':'last week: '+lwNet},
+      {label:'ATV',            value:fmt$(c.atv),     sub:dA?'vs '+lwAtv+' ('+dA+')':'last week: '+lwAtv},
+      {label:'Transactions',   value:c.total,         sub:c.inStore+' in-store / '+c.delivery+' delivery'},
+      {label:'Frequent Flyers',value:f.ffCount,       sub:f.ffBudtenders.length?f.ffBudtenders.join(', '):'none today'}
     ].map(function(s){
       return '<div class="stat-card"><div class="stat-label">'+s.label+'</div>'+
              '<div class="stat-val">'+s.value+'</div>'+
@@ -476,21 +402,14 @@
     }).join('');
   }
 
-  function checkReady() {
-    document.getElementById('generate-btn').disabled=!(closingData&&feeData);
-  }
+  function checkReady(){ document.getElementById('generate-btn').disabled=!(closingData&&feeData); }
 
-  // ── File uploads ───────────────────────────────────────────────
   document.getElementById('cr-input').addEventListener('change',function(e){
     var file=e.target.files[0]; if(!file) return;
     readXlsx(file,function(err,wb){
       if(err){toast('Error reading closing report','error');return;}
-      try{
-        closingData=parseClosing(wb);
-        document.getElementById('cr-name').textContent=file.name;
-        document.getElementById('cr-zone').classList.add('done');
-        checkReady();
-      } catch(ex){toast(ex.message,'error');}
+      try{ closingData=parseClosing(wb); document.getElementById('cr-name').textContent=file.name; document.getElementById('cr-zone').classList.add('done'); checkReady(); }
+      catch(ex){toast(ex.message,'error');}
     });
   });
 
@@ -498,16 +417,11 @@
     var file=e.target.files[0]; if(!file) return;
     readXlsx(file,function(err,wb){
       if(err){toast('Error reading fee/donation report','error');return;}
-      try{
-        feeData=parseFees(wb);
-        document.getElementById('fd-name').textContent=file.name;
-        document.getElementById('fd-zone').classList.add('done');
-        checkReady();
-      } catch(ex){toast(ex.message,'error');}
+      try{ feeData=parseFees(wb); document.getElementById('fd-name').textContent=file.name; document.getElementById('fd-zone').classList.add('done'); checkReady(); }
+      catch(ex){toast(ex.message,'error');}
     });
   });
 
-  // ── Generate ───────────────────────────────────────────────────
   document.getElementById('generate-btn').addEventListener('click',function(){
     if(!closingData||!feeData) return;
     var btn=document.getElementById('generate-btn');
@@ -519,8 +433,7 @@
       var msg=buildMessage(closingData,feeData,lw);
       var box=document.getElementById('msg-out');
       box.innerHTML='';
-      var headers=['Sales Recap','Performance Metrics','Transactions Yesterday:',
-                   'Team Shoutouts','Focus Areas','Inventory Updates','Cash Updates'];
+      var headers=['Sales Recap','Performance Metrics','Transactions Yesterday:','Team Shoutouts','Focus Areas','Inventory Updates','Cash Updates'];
       msg.split('\n').forEach(function(line){
         var span=document.createElement('span');
         if(headers.indexOf(line)!==-1) span.className='message-section-header';
@@ -534,60 +447,38 @@
     });
   });
 
-  // ── Copy ───────────────────────────────────────────────────────
   document.getElementById('copy-btn').addEventListener('click',function(){
-    navigator.clipboard.writeText(document.getElementById('msg-out').innerText)
-      .then(function(){toast('Copied!');});
+    navigator.clipboard.writeText(document.getElementById('msg-out').innerText).then(function(){toast('Copied!');});
   });
 
-  // ── Save ───────────────────────────────────────────────────────
   document.getElementById('save-btn').addEventListener('click',function(){
     if(!closingData||!feeData) return;
-
     var shoutouts=document.getElementById('field-shoutouts').value.trim();
     if(feeData.ffBudtenders.length>0){
       var ffLine='Shout out to '+feeData.ffBudtenders.join(' and ')+' for Frequent Flyer signups';
       shoutouts=shoutouts?ffLine+'; '+shoutouts:ffLine;
     }
-
     var lw=findLastWeekRow(closingData.date);
     var payload={
-      date:           closingData.date,
-      netSales:       closingData.netSales,
-      netSalesLastWeek: lw ? lw.netSales : '',
-      atv:            Math.round(closingData.atv*100)/100,
-      atvLastWeek:    lw ? lw.atv : '',
-      inStore:        closingData.inStore,
-      delivery:       closingData.delivery,
-      total:          closingData.total,
-      ffCount:        feeData.ffCount,
-      shoutouts:      shoutouts,
-      focus:          document.getElementById('field-focus').value.trim(),
-      inventory:      document.getElementById('field-inventory').value.trim(),
-      cash:           document.getElementById('field-cash').value.trim()
+      date:closingData.date, netSales:closingData.netSales,
+      netSalesLastWeek:lw?lw.netSales:'', atv:Math.round(closingData.atv*100)/100,
+      atvLastWeek:lw?lw.atv:'', inStore:closingData.inStore,
+      delivery:closingData.delivery, total:closingData.total,
+      ffCount:feeData.ffCount, shoutouts:shoutouts,
+      focus:document.getElementById('field-focus').value.trim(),
+      inventory:document.getElementById('field-inventory').value.trim(),
+      cash:document.getElementById('field-cash').value.trim()
     };
-
-    dbg('--- Save ---');
-    dbg('date='+payload.date+'  netSales='+payload.netSales+'  atv='+payload.atv);
-
+    dbg('--- Save: date='+payload.date+' netSales='+payload.netSales);
     var btn=document.getElementById('save-btn');
     btn.disabled=true; btn.textContent='Saving...';
-
     saveToSheet(payload).then(function(){
       toast('Saved to Google Sheets!');
-      dbg('Save submitted. Check your sheet to confirm the new row appeared.','dok');
-      // Add to local cache so same-session lookup works immediately
-      sheetRows.push({
-        date: payload.date,
-        netSales: payload.netSales,
-        atv: payload.atv
-      });
-    }).finally(function(){
-      btn.disabled=false; btn.textContent='Save to Google Sheets';
-    });
+      dbg('Saved. Check your sheet for the new row.','dok');
+      sheetRows.push({date:payload.date,netSales:payload.netSales,atv:payload.atv});
+    }).finally(function(){ btn.disabled=false; btn.textContent='Save to Google Sheets'; });
   });
 
-  // Pre-load on open
   loadSheetData();
 </script>
 </body>
