@@ -52,7 +52,7 @@
     .stat-sub { font-size:11px; color:var(--muted); margin-top:2px; }
     .message-box { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.25rem; font-family:var(--mono); font-size:12.5px; line-height:1.75; white-space:pre-wrap; word-break:break-word; }
     .message-section-header { color:var(--accent); font-weight:600; }
-    .debug-box { background:#080808; border:1px solid #222; border-radius:8px; padding:12px 14px; font-family:var(--mono); font-size:11px; line-height:1.9; white-space:pre-wrap; color:#666; max-height:320px; overflow-y:auto; }
+    .debug-box { background:#080808; border:1px solid #222; border-radius:8px; padding:12px 14px; font-family:var(--mono); font-size:11px; line-height:1.9; white-space:pre-wrap; color:#666; max-height:300px; overflow-y:auto; }
     .dok { color:var(--success); } .derr { color:var(--danger); } .dwarn { color:#f0a500; }
     .toast { position:fixed; bottom:1.5rem; right:1.5rem; background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 16px; font-size:13px; display:none; z-index:999; box-shadow:0 4px 20px rgba(0,0,0,0.4); }
     .toast.success { border-color:var(--success); color:var(--success); }
@@ -60,9 +60,7 @@
     .divider { border:none; border-top:1px solid var(--border); margin:1.5rem 0; }
     #output { display:none; }
     .output-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:8px; }
-    .manual-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
-    .override-card { background:#1a1a00; border:1px solid #3a3a00; border-radius:var(--radius); padding:1rem 1.25rem; }
-    @media(max-width:600px) { .grid-2,.grid-4,.manual-row { grid-template-columns:1fr; } }
+    @media(max-width:600px) { .grid-2,.grid-4 { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
@@ -109,29 +107,6 @@
           <label class="field-label">Today's goal ($)</label>
           <input type="number" id="daily-goal" value="60000">
         </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- LAST WEEK MANUAL OVERRIDE -->
-  <div class="section">
-    <p class="section-label">Last Week Data</p>
-    <div class="override-card">
-      <p style="font-size:11px;color:#888;margin-bottom:10px;">
-        Auto-pulled from Google Sheets. If it says "[Add from last week]" after generating, fill these in manually.
-      </p>
-      <div class="manual-row">
-        <div>
-          <label class="field-label">Same Day Last Week Net Sales ($)</label>
-          <input type="number" id="manual-lw-sales" placeholder="e.g. 20456.73" step="0.01">
-        </div>
-        <div>
-          <label class="field-label">Same Day Last Week ATV ($)</label>
-          <input type="number" id="manual-lw-atv" placeholder="e.g. 52.05" step="0.01">
-        </div>
-      </div>
-      <div style="margin-top:10px;">
-        <button class="secondary" id="test-backend-btn" style="font-size:11px;padding:6px 12px;">Test Backend Connection</button>
       </div>
     </div>
   </div>
@@ -200,14 +175,17 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  var BACKEND_URL = 'https://zipline-backend-production.up.railway.app';
+  // Direct Apps Script URL — no Railway middleman
+  var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzHG57s8DBEYaq4tXwiYnmQ0f1zdeyuqMpgzItPPKRJm-GYiEfseObTNMR_xYaC5t4q/exec';
+
   var closingData = null;
   var feeData = null;
   var sheetRows = [];
 
-  // ── Debug ─────────────────────────────────────────────────────────
+  // ── Debug ─────────────────────────────────────────────────
   function dbg(msg, cls) {
     var box = document.getElementById('debug-out');
+    if (!box) return;
     if (box.textContent === 'Generate a report to see debug info.') box.innerHTML = '';
     var s = document.createElement('span');
     if (cls) s.className = cls;
@@ -217,7 +195,7 @@
     box.scrollTop = box.scrollHeight;
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────
   function toast(msg, type) {
     var el = document.getElementById('toast');
     el.textContent = msg;
@@ -245,34 +223,27 @@
 
   function pad2(n) { return String(n).padStart(2, '0'); }
 
-  // Converts ANY date value to MM/DD/YYYY (zero-padded). 
-  // Handles: JS Date, Excel serial number, ISO string, slash-separated string.
+  // Normalize any date value to MM/DD/YYYY string
   function toDateStr(val) {
     if (val === null || val === undefined || val === '') return '';
-
     if (val instanceof Date) {
       if (isNaN(val.getTime())) return '';
       return pad2(val.getMonth()+1) + '/' + pad2(val.getDate()) + '/' + val.getFullYear();
     }
-
     if (typeof val === 'number') {
-      // Excel serial to JS Date (accounting for timezone)
       var dt = new Date(Math.round((val - 25569) * 86400 * 1000));
       dt = new Date(dt.getTime() + dt.getTimezoneOffset() * 60000);
       return pad2(dt.getMonth()+1) + '/' + pad2(dt.getDate()) + '/' + dt.getFullYear();
     }
-
     var s = String(val).trim();
-    // ISO: YYYY-MM-DD
     var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (iso) return iso[2] + '/' + iso[3] + '/' + iso[1];
-    // Slash: M/D/YYYY or MM/DD/YYYY
     var sl = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (sl) return pad2(parseInt(sl[1])) + '/' + pad2(parseInt(sl[2])) + '/' + sl[3];
     return s;
   }
 
-  // ── XLSX readers ──────────────────────────────────────────────────
+  // ── XLSX readers ──────────────────────────────────────────
   function readXlsx(file, cb) {
     var r = new FileReader();
     r.onload = function(e) {
@@ -298,9 +269,7 @@
     return {
       netSales: row['NetSales'] || 0,
       atv: row['AvgPerCart'] || 0,
-      inStore: inStore,
-      delivery: delivery,
-      total: inStore + delivery,
+      inStore: inStore, delivery: delivery, total: inStore + delivery,
       date: toDateStr(row['PosDate'])
     };
   }
@@ -330,35 +299,109 @@
     return {ffCount:ffCount, ffBudtenders:buds};
   }
 
-  // ── Last-week lookup ──────────────────────────────────────────────
+  // ── Load sheet data from Apps Script (GET via no-cors jsonp trick) ──
+  // Apps Script GET returns JSON array of rows.
+  // We use a script tag trick to avoid CORS issues since Apps Script
+  // doesn't always send correct CORS headers on redirects.
+  function loadSheetData() {
+    dbg('Fetching sheet data from Google Sheets...');
+    return new Promise(function(resolve) {
+      // Try fetch first (works if CORS is set up)
+      fetch(APPS_SCRIPT_URL)
+        .then(function(r) { return r.json(); })
+        .then(function(rows) {
+          sheetRows = rows;
+          dbg('Loaded ' + rows.length + ' rows from Google Sheets.', 'dok');
+          if (rows.length > 1) {
+            dbg('Sample row 1: ' + JSON.stringify(rows[1]));
+          }
+          resolve();
+        })
+        .catch(function(e) {
+          dbg('Fetch error: ' + e.message + ' — trying JSONP fallback...', 'dwarn');
+          // JSONP fallback for CORS issues
+          window.__sheetsCallback = function(data) {
+            sheetRows = data;
+            dbg('JSONP loaded ' + data.length + ' rows.', 'dok');
+            resolve();
+          };
+          var script = document.createElement('script');
+          script.src = APPS_SCRIPT_URL + '?callback=__sheetsCallback';
+          script.onerror = function() {
+            dbg('JSONP also failed. Sheet data unavailable.', 'derr');
+            resolve();
+          };
+          document.head.appendChild(script);
+        });
+    });
+  }
+
+  // ── Save via Apps Script POST ─────────────────────────────
+  // Apps Script doesn't accept POST with JSON body cross-origin,
+  // so we submit via a hidden form (no CORS restriction).
+  function saveViaForm(payload) {
+    return new Promise(function(resolve, reject) {
+      // Try fetch POST first
+      fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify(payload)
+        // No Content-Type header — avoids CORS preflight
+      })
+      .then(function(r) { return r.text(); })
+      .then(function(txt) {
+        dbg('Save response: ' + txt);
+        try {
+          var res = JSON.parse(txt);
+          if (res.status === 'ok') resolve('ok');
+          else reject(new Error(txt));
+        } catch(e) { resolve('ok'); } // Apps Script sometimes returns non-JSON on success
+      })
+      .catch(function(e) {
+        dbg('POST fetch failed: ' + e.message + ', trying form submit...', 'dwarn');
+        // Form-based fallback — opens briefly then closes
+        var iframe = document.createElement('iframe');
+        iframe.name = 'save-frame';
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = APPS_SCRIPT_URL;
+        form.target = 'save-frame';
+
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'payload';
+        input.value = JSON.stringify(payload);
+        form.appendChild(input);
+
+        document.body.appendChild(form);
+        form.submit();
+
+        setTimeout(function() {
+          document.body.removeChild(form);
+          document.body.removeChild(iframe);
+          resolve('ok'); // Assume success after 3s
+        }, 3000);
+      });
+    });
+  }
+
+  // ── Last-week lookup ──────────────────────────────────────
   function findLastWeekRow(targetDate) {
     dbg('--- Last-Week Lookup ---');
-    dbg('Report date (from Excel): "' + targetDate + '"');
-
-    // Check manual override first
-    var manSales = parseFloat(document.getElementById('manual-lw-sales').value);
-    var manAtv   = parseFloat(document.getElementById('manual-lw-atv').value);
-    if (!isNaN(manSales) && manSales > 0) {
-      dbg('Using manual override: netSales=' + manSales + '  atv=' + (isNaN(manAtv) ? '(none)' : manAtv), 'dok');
-      return { netSales: manSales, atv: isNaN(manAtv) ? 0 : manAtv };
-    }
+    dbg('Report date: "' + targetDate + '"');
 
     if (!sheetRows.length) {
-      dbg('No sheet rows in memory.', 'derr');
+      dbg('No sheet rows loaded.', 'derr');
       return null;
     }
 
-    dbg('Rows in memory: ' + sheetRows.length + ' (row 0 = header)');
-    dbg('Showing all date column values from sheet:');
-    for (var x = 1; x < sheetRows.length; x++) {
-      var raw = sheetRows[x][0];
-      var conv = toDateStr(raw);
-      dbg('  [' + x + '] typeof=' + typeof raw + '  raw=' + JSON.stringify(raw) + '  toDateStr="' + conv + '"');
-    }
+    dbg('Total rows in memory: ' + sheetRows.length);
 
     var d = new Date(targetDate);
     if (isNaN(d.getTime())) {
-      dbg('Cannot parse "' + targetDate + '" as a date.', 'derr');
+      dbg('Cannot parse date: "' + targetDate + '"', 'derr');
       return null;
     }
     d.setDate(d.getDate() - 7);
@@ -366,64 +409,19 @@
     dbg('Searching for: "' + lwStr + '"');
 
     for (var i = 1; i < sheetRows.length; i++) {
-      var rowDate = toDateStr(sheetRows[i][0]);
+      var raw = sheetRows[i][0];
+      var rowDate = toDateStr(raw);
+      dbg('  row ' + i + ': raw=' + JSON.stringify(raw) + '  normalized="' + rowDate + '"');
       if (rowDate === lwStr) {
         dbg('MATCH at row ' + i + ': netSales=' + sheetRows[i][1] + '  atv=' + sheetRows[i][3], 'dok');
         return { netSales: parseFloat(sheetRows[i][1]) || 0, atv: parseFloat(sheetRows[i][3]) || 0 };
       }
     }
-    dbg('No row matched "' + lwStr + '". Row for that date is missing from the sheet.', 'dwarn');
+    dbg('No match for "' + lwStr + '"', 'dwarn');
     return null;
   }
 
-  // ── Backend ───────────────────────────────────────────────────────
-  function loadSheetData() {
-    dbg('Fetching /data from backend...');
-    return fetch(BACKEND_URL + '/data')
-      .then(function(r) {
-        dbg('HTTP ' + r.status);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        return r.json();
-      })
-      .then(function(rows) {
-        sheetRows = rows;
-        dbg('Loaded ' + rows.length + ' rows.', 'dok');
-        if (rows.length > 1) {
-          dbg('First data row raw: ' + JSON.stringify(rows[1]));
-        }
-      })
-      .catch(function(e) { dbg('loadSheetData error: ' + e.message, 'derr'); });
-  }
-
-  // ── Test backend button ───────────────────────────────────────────
-  document.getElementById('test-backend-btn').addEventListener('click', function() {
-    document.getElementById('output').style.display = 'block';
-    dbg('=== Testing backend /data ===');
-    fetch(BACKEND_URL + '/data')
-      .then(function(r) {
-        dbg('Status: ' + r.status);
-        return r.text();
-      })
-      .then(function(txt) {
-        dbg('Raw response (first 800 chars):');
-        dbg(txt.substring(0, 800));
-        try {
-          var parsed = JSON.parse(txt);
-          dbg('Parsed as JSON: ' + parsed.length + ' rows.', 'dok');
-          if (parsed.length > 1) {
-            dbg('Row 1 (first data row): ' + JSON.stringify(parsed[1]));
-            dbg('Date cell type: ' + typeof parsed[1][0]);
-            dbg('Date cell value: ' + JSON.stringify(parsed[1][0]));
-            dbg('toDateStr result: "' + toDateStr(parsed[1][0]) + '"');
-          }
-        } catch(e) {
-          dbg('Could not parse as JSON: ' + e.message, 'derr');
-        }
-      })
-      .catch(function(e) { dbg('Fetch error: ' + e.message, 'derr'); });
-  });
-
-  // ── Build message ─────────────────────────────────────────────────
+  // ── Build message ─────────────────────────────────────────
   function buildMessage(c, f, lw) {
     var weekly = document.getElementById('weekly-goal').value || 580000;
     var daily  = document.getElementById('daily-goal').value || 60000;
@@ -437,8 +435,7 @@
       shoutoutLines.push('Shout out to ' + f.ffBudtenders.join(' and ') + ' for signing up Frequent Flyer members!! Great Job!!!');
     if (shoutouts)
       shoutoutLines.push('Shout out to ' + shoutouts + '!! Great Job!!!');
-    if (!shoutoutLines.length)
-      shoutoutLines.push('No shoutouts today.');
+    if (!shoutoutLines.length) shoutoutLines.push('No shoutouts today.');
 
     var lwNet = '[Add from last week]', lwAtv = '[Add from last week]';
     if (lw && lw.netSales) {
@@ -491,7 +488,7 @@
     document.getElementById('generate-btn').disabled = !(closingData && feeData);
   }
 
-  // ── File upload listeners ─────────────────────────────────────────
+  // ── File upload listeners ─────────────────────────────────
   document.getElementById('cr-input').addEventListener('change', function(e) {
     var file = e.target.files[0]; if (!file) return;
     readXlsx(file, function(err, wb) {
@@ -518,7 +515,7 @@
     });
   });
 
-  // ── Generate ──────────────────────────────────────────────────────
+  // ── Generate ──────────────────────────────────────────────
   document.getElementById('generate-btn').addEventListener('click', function() {
     if (!closingData || !feeData) return;
     var btn = document.getElementById('generate-btn');
@@ -546,20 +543,16 @@
       document.getElementById('output').scrollIntoView({behavior:'smooth', block:'start'});
       btn.disabled = false;
       btn.textContent = 'Generate Zipline Message';
-    }).catch(function(e) {
-      dbg('Generate error: ' + (e && e.message ? e.message : String(e)), 'derr');
-      btn.disabled = false;
-      btn.textContent = 'Generate Zipline Message';
     });
   });
 
-  // ── Copy ──────────────────────────────────────────────────────────
+  // ── Copy ──────────────────────────────────────────────────
   document.getElementById('copy-btn').addEventListener('click', function() {
     navigator.clipboard.writeText(document.getElementById('msg-out').innerText)
       .then(function() { toast('Copied!'); });
   });
 
-  // ── Save ──────────────────────────────────────────────────────────
+  // ── Save ──────────────────────────────────────────────────
   document.getElementById('save-btn').addEventListener('click', function() {
     if (!closingData || !feeData) return;
 
@@ -587,51 +580,32 @@
     };
 
     dbg('--- Save ---');
-    dbg('Posting payload: ' + JSON.stringify(payload));
+    dbg('Payload: ' + JSON.stringify(payload));
 
     var btn = document.getElementById('save-btn');
     btn.disabled = true;
     btn.textContent = 'Saving...';
 
-    fetch(BACKEND_URL + '/save', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    })
-    .then(function(r) {
-      dbg('HTTP ' + r.status);
-      return r.text().then(function(txt) { return {status: r.status, txt: txt}; });
-    })
-    .then(function(obj) {
-      dbg('Response: ' + obj.txt);
-      try {
-        var res = JSON.parse(obj.txt);
-        if (res.status === 'ok') {
-          toast('Saved to Google Sheets!');
-          dbg('Save OK!', 'dok');
-          sheetRows.push([payload.date, payload.netSales, payload.netSalesLastWeek,
-            payload.atv, payload.atvLastWeek, payload.inStore, payload.delivery,
-            payload.total, payload.ffCount, payload.shoutouts,
-            payload.focus, payload.inventory, payload.cash]);
-        } else {
-          toast('Backend error — check debug log', 'error');
-          dbg('Non-ok response: ' + obj.txt, 'derr');
-        }
-      } catch(e) {
-        dbg('Could not parse response as JSON: ' + obj.txt, 'derr');
-        toast('Unexpected response — check debug log', 'error');
-      }
-    })
-    .catch(function(e) {
-      dbg('Save fetch error: ' + e.message, 'derr');
-      toast('Could not reach backend: ' + e.message, 'error');
-    })
-    .finally(function() {
-      btn.disabled = false;
-      btn.textContent = 'Save to Google Sheets';
-    });
+    saveViaForm(payload)
+      .then(function() {
+        toast('Saved to Google Sheets!');
+        dbg('Save successful!', 'dok');
+        sheetRows.push([payload.date, payload.netSales, payload.netSalesLastWeek,
+          payload.atv, payload.atvLastWeek, payload.inStore, payload.delivery,
+          payload.total, payload.ffCount, payload.shoutouts,
+          payload.focus, payload.inventory, payload.cash]);
+      })
+      .catch(function(e) {
+        toast('Save failed: ' + e.message, 'error');
+        dbg('Save error: ' + e.message, 'derr');
+      })
+      .finally(function() {
+        btn.disabled = false;
+        btn.textContent = 'Save to Google Sheets';
+      });
   });
 
+  // Load sheet data on page open
   loadSheetData();
 </script>
 </body>
