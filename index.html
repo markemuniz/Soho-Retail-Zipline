@@ -6,49 +6,6 @@
   <title>Zipline Generator — The Travel Agency DTBK</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <style>
-    /*
-    ============================================================
-    GOOGLE SHEETS SETUP (one-time)
-    ============================================================
-    1. Open your "Retail Zipline Data" Google Sheet
-    2. Click Extensions > Apps Script
-    3. Paste the following code and save:
-
-    function doPost(e) {
-      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-      var data = JSON.parse(e.postData.contents);
-      sheet.appendRow([
-        data.date,
-        data.netSales,
-        data.netSalesLastWeek || '',
-        data.atv,
-        data.atvLastWeek || '',
-        data.inStore,
-        data.delivery,
-        data.total,
-        data.ffCount,
-        data.shoutouts,
-        data.focus,
-        data.inventory,
-        data.cash
-      ]);
-      return ContentService.createTextOutput(JSON.stringify({status:'ok'}))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    function doGet(e) {
-      var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-      var data = sheet.getDataRange().getValues();
-      return ContentService.createTextOutput(JSON.stringify(data))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    4. Click Deploy > New deployment > Web app
-    5. Set "Execute as" = Me, "Who has access" = Anyone
-    6. Copy the web app URL and paste it into BACKEND_URL below
-    ============================================================
-    */
-
     :root {
       --bg: #0f0f0f;
       --surface: #1a1a1a;
@@ -406,11 +363,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  // ============================================================
-  // PASTE YOUR APPS SCRIPT WEB APP URL HERE after setup:
-  // ============================================================
   var BACKEND_URL = 'https://zipline-backend-production.up.railway.app';
-  // ============================================================
 
   var closingData = null;
   var feeData = null;
@@ -441,6 +394,45 @@
     return (d >= 0 ? '+' : '') + d + '%';
   }
 
+  // ============================================================
+  // FIX: Unified date normalizer that handles Date objects,
+  // Excel serial numbers, and M/D/YYYY strings consistently.
+  // Always outputs "M/D/YYYY" with no zero-padding.
+  // ============================================================
+  function toDateStr(val) {
+    if (!val) return '';
+
+    // Already a JS Date object
+    if (val instanceof Date) {
+      return (val.getMonth() + 1) + '/' + val.getDate() + '/' + val.getFullYear();
+    }
+
+    // Excel serial number (number, not a date object)
+    if (typeof val === 'number') {
+      // Convert Excel serial to JS date (Excel epoch is Jan 0 1900; JS is Jan 1 1970)
+      var excelEpoch = new Date(1899, 11, 30);
+      var d = new Date(excelEpoch.getTime() + val * 86400000);
+      return (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+    }
+
+    // String — handle M/D/YYYY, MM/DD/YYYY, YYYY-MM-DD
+    var s = String(val).trim();
+
+    // YYYY-MM-DD
+    var iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) {
+      return parseInt(iso[2]) + '/' + parseInt(iso[3]) + '/' + iso[1];
+    }
+
+    // M/D/YYYY or MM/DD/YYYY
+    var slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (slash) {
+      return parseInt(slash[1]) + '/' + parseInt(slash[2]) + '/' + slash[3];
+    }
+
+    return s;
+  }
+
   function readXlsx(file, cb) {
     var r = new FileReader();
     r.onload = function(e) {
@@ -456,6 +448,10 @@
     var data = XLSX.utils.sheet_to_json(ws);
     var row = data[0];
     if (!row) throw new Error('No data in Overview sheet');
+
+    // FIX: normalize date immediately using unified converter
+    var dateStr = toDateStr(row['PosDate']);
+
     var ws2 = wb.Sheets['Payments'];
     var inStore = 0, delivery = 0;
     if (ws2) {
@@ -469,7 +465,7 @@
       inStore: inStore,
       delivery: delivery,
       total: inStore + delivery,
-      date: row['PosDate'] || ''
+      date: dateStr
     };
   }
 
@@ -498,21 +494,25 @@
     return { ffCount: ffCount, ffBudtenders: buds };
   }
 
-  function normDate(str) {
-    if (!str) return '';
-    var parts = String(str).split('/');
-    if (parts.length !== 3) return String(str);
-    return parseInt(parts[0]) + '/' + parseInt(parts[1]) + '/' + parts[2];
-  }
-
+  // FIX: findLastWeekRow now uses toDateStr() on sheet cell values
+  // so Date objects, serials, and strings all compare correctly.
   function findLastWeekRow(targetDate) {
     if (!sheetRows.length) return null;
+
+    // targetDate is already a clean M/D/YYYY string from parseClosing
     var d = new Date(targetDate);
+    if (isNaN(d.getTime())) return null;
+
     d.setDate(d.getDate() - 7);
-    var lwStr = normDate((d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear());
+    var lwStr = (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear();
+
     for (var i = 1; i < sheetRows.length; i++) {
-      if (normDate(sheetRows[i][0]) === lwStr) {
-        return { netSales: parseFloat(sheetRows[i][1]) || 0, atv: parseFloat(sheetRows[i][3]) || 0 };
+      var rowDateStr = toDateStr(sheetRows[i][0]);
+      if (rowDateStr === lwStr) {
+        return {
+          netSales: parseFloat(sheetRows[i][1]) || 0,
+          atv: parseFloat(sheetRows[i][3]) || 0
+        };
       }
     }
     return null;
@@ -624,27 +624,27 @@
     btn.disabled = true;
     btn.textContent = 'Loading sheet data...';
     loadSheetData().then(function() {
-    var lw = findLastWeekRow(closingData.date);
-    var msg = buildMessage(closingData, feeData, lw);
+      var lw = findLastWeekRow(closingData.date);
+      var msg = buildMessage(closingData, feeData, lw);
 
-    var box = document.getElementById('msg-out');
-    box.innerHTML = '';
-    msg.split('\n').forEach(function(line) {
-      var span = document.createElement('span');
-      var isHeader = line === 'Sales Recap' || line === 'Performance Metrics' ||
-                     line === 'Transactions Yesterday:' || line === 'Team Shoutouts' ||
-                     line === 'Focus Areas' || line === 'Inventory Updates' || line === 'Cash Updates';
-      if (isHeader) span.className = 'message-section-header';
-      span.textContent = line;
-      box.appendChild(span);
-      box.appendChild(document.createTextNode('\n'));
-    });
+      var box = document.getElementById('msg-out');
+      box.innerHTML = '';
+      msg.split('\n').forEach(function(line) {
+        var span = document.createElement('span');
+        var isHeader = line === 'Sales Recap' || line === 'Performance Metrics' ||
+                       line === 'Transactions Yesterday:' || line === 'Team Shoutouts' ||
+                       line === 'Focus Areas' || line === 'Inventory Updates' || line === 'Cash Updates';
+        if (isHeader) span.className = 'message-section-header';
+        span.textContent = line;
+        box.appendChild(span);
+        box.appendChild(document.createTextNode('\n'));
+      });
 
-    renderStats(closingData, feeData, lw);
-    document.getElementById('output').style.display = 'block';
-    document.getElementById('output').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    btn.disabled = false;
-    btn.textContent = 'Generate Zipline Message';
+      renderStats(closingData, feeData, lw);
+      document.getElementById('output').style.display = 'block';
+      document.getElementById('output').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      btn.disabled = false;
+      btn.textContent = 'Generate Zipline Message';
     }).catch(function() {
       btn.disabled = false;
       btn.textContent = 'Generate Zipline Message';
@@ -659,10 +659,7 @@
   });
 
   document.getElementById('save-btn').addEventListener('click', function() {
-    if (!BACKEND_URL) {
-      toast('Backend not configured', 'error');
-      return;
-    }
+    if (!BACKEND_URL) { toast('Backend not configured', 'error'); return; }
     if (!closingData || !feeData) return;
 
     var shoutouts = document.getElementById('field-shoutouts').value.trim();
@@ -674,7 +671,7 @@
     var lw = findLastWeekRow(closingData.date);
 
     var payload = {
-      date: closingData.date,
+      date: closingData.date,           // Now always a clean M/D/YYYY string
       netSales: closingData.netSales,
       netSalesLastWeek: lw ? lw.netSales : '',
       atv: Math.round(closingData.atv * 100) / 100,
@@ -706,7 +703,7 @@
         toast('Sheet returned an error', 'error');
       }
     })
-    .catch(function() { toast('Could not connect to Google Sheets', 'error'); })
+    .catch(function() { toast('Could not connect to backend', 'error'); })
     .finally(function() {
       document.getElementById('save-btn').disabled = false;
       document.getElementById('save-btn').textContent = 'Save to Google Sheets';
