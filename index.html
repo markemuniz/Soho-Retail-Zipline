@@ -124,6 +124,10 @@
         <textarea id="field-cash">- make sure all cash drops are entered on the paper and in the cash tracker
 - remember for cash transactions select "Cash" for debit transactions hit "Debit"</textarea>
       </div>
+      <div>
+        <label class="field-label">Promos / Events</label>
+        <textarea id="field-promos" placeholder="e.g. 20% off edibles this weekend, Community event Saturday 4–7pm"></textarea>
+      </div>
     </div>
   </div>
 
@@ -203,7 +207,7 @@
     return s;
   }
 
-  // ── JSONP loader — only method that reliably works cross-origin with Apps Script ──
+  // -- JSONP loader — only method that reliably works cross-origin with Apps Script --
   function loadSheetData() {
     dbg('Fetching sheet data via JSONP...');
     return new Promise(function(resolve) {
@@ -217,8 +221,6 @@
         try { document.head.removeChild(script); } catch(e){}
         delete window[cbName];
         if (rows) {
-          // rows[0] is the header row, rows[1]+ are data
-          // columns: Date(0), NetSales(1), NetSalesLW(2), ATV(3), ATVLW(4)
           sheetRows = rows.slice(1).map(function(r){
             return {
               date:     toDateStr(r[0]),
@@ -275,7 +277,7 @@
     return null;
   }
 
-  // ── Save via form POST (no CORS preflight) ──
+  // -- Save via form POST (no CORS preflight) --
   function saveToSheet(payload) {
     return new Promise(function(resolve) {
       var iframe = document.createElement('iframe');
@@ -349,6 +351,7 @@
     var daily=document.getElementById('daily-goal').value||60000;
     var shoutouts=document.getElementById('field-shoutouts').value.trim();
     var focus=document.getElementById('field-focus').value.trim();
+    var promos=document.getElementById('field-promos').value.trim();
     var inventory=document.getElementById('field-inventory').value.trim();
     var cash=document.getElementById('field-cash').value.trim();
 
@@ -360,6 +363,7 @@
     var lwNet='[Add from last week]',lwAtv='[Add from last week]';
     if(lw&&lw.netSales){ var dN=delta(c.netSales,lw.netSales); lwNet=fmt$(lw.netSales)+(dN?' (\u0394 '+dN+')':''); }
     if(lw&&lw.atv){      var dA=delta(c.atv,lw.atv);           lwAtv=fmt$(lw.atv)+(dA?' (\u0394 '+dA+')':''); }
+
 
     return 'Sales Recap\n'+
       "Yesterday's Sales: "+fmt$(c.netSales)+'\n'+
@@ -377,7 +381,8 @@
       'Team Shoutouts\n'+sl.join('\n')+'\n\n'+
       'Focus Areas\n'+focus+'\n\n'+
       'Inventory Updates\n'+inventory+'\n\n'+
-      'Cash Updates\n'+cash;
+      'Cash Updates\n'+cash+
+      (promos ? '\n\nPromos / Events\n'+promos : '');
   }
 
   function renderStats(c,f,lw) {
@@ -428,7 +433,7 @@
       var msg=buildMessage(closingData,feeData,lw);
       var box=document.getElementById('msg-out');
       box.innerHTML='';
-      var headers=['Sales Recap','Performance Metrics','Transactions Yesterday:','Team Shoutouts','Focus Areas','Inventory Updates','Cash Updates'];
+      var headers=['Sales Recap','Performance Metrics','Transactions Yesterday:','Team Shoutouts','Focus Areas','Promos / Events','Inventory Updates','Cash Updates'];
       msg.split('\n').forEach(function(line){
         var span=document.createElement('span');
         if(headers.indexOf(line)!==-1) span.className='message-section-header';
@@ -461,6 +466,7 @@
       delivery:closingData.delivery, total:closingData.total,
       ffCount:feeData.ffCount, shoutouts:shoutouts,
       focus:document.getElementById('field-focus').value.trim(),
+      promos:document.getElementById('field-promos').value.trim(),
       inventory:document.getElementById('field-inventory').value.trim(),
       cash:document.getElementById('field-cash').value.trim()
     };
